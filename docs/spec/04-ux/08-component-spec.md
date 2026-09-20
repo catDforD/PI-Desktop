@@ -811,7 +811,9 @@ containing reasoning, tools and intermediate assistant text in transcript
 order. Its trailing answer streams outside the disclosure. Later activity
 moves a provisional answer into the process without altering the stored
 message. Detailed mode does not wrap that process: the same parts stay in
-place. Assistant errors and trailing aborted partial replies stay visible.
+place. Its last tool-call (or hosted-search) row of the last activity group
+starts expanded; earlier tool details stay collapsed. Compact keeps those
+payloads collapsed. Assistant errors and trailing aborted partial replies stay visible.
 Compaction and user/system boundaries are unchanged.
 
 Compact mode starts completed process areas collapsed. Manual choices and
@@ -1678,8 +1680,12 @@ Single message render — either user (plaintext) or assistant (markdown streami
   menu: Copy conversation, Select conversation text, Scroll to top, Jump to
   latest. Quote, Annotate, and Open side chat stay retired (ADR 0268). A
   streaming or empty assistant turn that would produce no items opens
-  nothing. Copying from the menu reports through the toast host because the
-  surface closes as soon as the item runs.
+  nothing. Copy on a speaking-turn menu writes the live selection in that
+  turn captured when the menu opened; a collapsed caret, or a selection
+  outside the row, falls back to the whole turn.
+  Copy conversation still writes the labelled thread. Copying from the
+  menu reports through the toast host because the surface closes as soon
+  as the item runs.
   Fork creates and activates an independent session whose snapshot ends at the
   selected assistant response, requires an idle source, and leaves that
   source's transcript, live runtime, and provider cache state untouched (D134).
@@ -1950,12 +1956,16 @@ and is intentionally not an elevated card.
 
 Consecutive tool calls form one ChatGPT-style processing group. Historical
 groups are collapsed by default. While the turn is active, the latest live
-group opens automatically so the process list is visible. Tool-call details
-remain collapsed by default, including failed tool calls; only the latest
-thinking row opens automatically. When the group or turn settles, automatically
-managed thinking disclosures close so the answer remains the visual focus. A
-user click on a group, row, or collapse rail takes ownership of that disclosure;
-later stream updates and completion never reverse that choice.
+group opens automatically so the process list is visible. In detailed mode,
+the latest tool-call or hosted-search row of the last activity group in a
+turn opens automatically; earlier rows stay collapsed. Compact mode keeps
+tool-call details collapsed by default, including failed tool calls. The
+latest thinking row opens automatically while it streams. When the group or
+turn settles, automatically managed thinking disclosures close so the answer
+remains the visual focus; a detailed last-tool disclosure stays open unless
+a later activity supersedes it. A user click on a group, row, or collapse
+rail takes ownership of that disclosure; later stream updates and completion
+never reverse that choice.
 The group header shows `Processing · 12s` while active or `Processed for 12s`
 after completion. Expanding it reveals the ordered tool activity rows and their
 nested result disclosures. The group
@@ -1985,9 +1995,10 @@ seconds when non-zero) from one hour onward. Zero-value units are omitted, so
   transcript after completion. Historical groups remain
   collapsed; the latest active group opens automatically and returns to a
   collapsed state when it settles unless the user has interacted with it.
-- Tool-call details remain collapsed by default while the group is open. The
-  latest thinking row opens automatically while it streams and closes when the
-  turn settles unless the user has interacted with it.
+- Tool-call details remain collapsed by default while a compact group is open.
+  In detailed mode the last tool-call or hosted-search row of the last activity
+  group starts expanded. The latest thinking row opens automatically while it
+  streams and closes when the turn settles unless the user has interacted with it.
 - The processing group spans the full available assistant column, so expanded
   result details keep a usable width even when the header or payload is short.
 - The visible label is a natural-language action (`Read`, `Ran`, `Searched`),
@@ -2060,16 +2071,17 @@ twice.
 
 | State | Header treatment | Expanded content |
 |---|---|---|
-| Running | Progressive action with readable text and a pulsing marker; a `run` row also shows its spinner and pulses the status dot beside `Working…` | The latest thinking row opens automatically while it streams; tool-call details stay collapsed |
-| Success | Past-tense action + result chips; no green success badge, except a `run` row's dot and `Done` | Result blocks, then arguments if not already shown; automatic thinking disclosures close when the turn settles |
+| Running | Progressive action with readable text and a pulsing marker; a `run` row also shows its spinner and pulses the status dot beside `Working…` | The latest thinking row opens automatically while it streams; detailed mode also opens the last tool of the last activity group; compact tool-call details stay collapsed |
+| Success | Past-tense action + result chips; no green success badge, except a `run` row's dot and `Done` | Result blocks, then arguments if not already shown; automatic thinking disclosures close when the turn settles; detailed last-tool stays open unless superseded |
 | Error | Past-tense action + compact danger status; details remain collapsed by default and open only on user request. A `run` row is in this state whenever its command exited non-zero, whatever the call reported (D227) | Error note first, then arguments |
 | Denied | Muted `Denied` status | Permission result when available |
 
 ### 9.6 Interactions
 
-- Click the row: expand/collapse the result blocks. Tool-call details are
-  collapsed by default while a live group is open; historical and failed rows
-  remain collapsed until the user opens them.
+- Click the row: expand/collapse the result blocks. Compact tool-call details
+  stay collapsed by default while a live group is open. Detailed mode opens the
+  last tool-call of the last activity group; earlier and failed rows remain
+  collapsed until the user opens them.
 - A file path that a row or its result names is a link, not decoration: clicking
   the summary path of a `Read`, `Write`, `Edit`, or `fetch` row, or a path in a
   result's file list or match groups, completes the reference through the same

@@ -2195,8 +2195,8 @@ MainChat 弥补了缺口。 Maximized/fullscreen 调用保留最新的
 #### E2E-CHAT-transcript-context-menu：右键消息或记录
 
 - **前提条件**：会话中有一条完成的用户提示和一条完成的助手回答；对话面板已聚焦。
-- **步骤**：1）右键用户板。2）选择复制，再选择选中消息文本。3）右键助手回合并选择复制。4）右键最后一回合下方空白处，选择复制整个对话。5）在打开的菜单上按 Escape，再按 Tab。6）右键回答里的 markdown 链接。
-- **预期**：用户菜单列出复制、选中消息文本、编辑，以及分隔后的删除；助手菜单列出复制、选中消息文本、重新生成和分叉。复制把该消息或带说话人标签的整段对话写入剪贴板并显示 toast。选中文本会高亮气泡。Escape 和 Tab 关闭菜单且不执行项。链接仍提供在默认浏览器打开、在工作面板打开、复制链接地址。引用、批注、打开侧边聊天不出现（ADR 0268）。表面是视口固定的文档级层，不会改变记录高度。
+- **步骤**：1）右键用户板。2）选择复制，再选择选中消息文本。3）在用户板里选中一段文字，再右键该板并选择复制；收起选区后再右键复制一次。4）右键助手回合并选择复制。5）右键最后一回合下方空白处，选择复制整个对话。6）在打开的菜单上按 Escape，再按 Tab。7）右键回答里的 markdown 链接。
+- **预期**：用户菜单列出复制、选中消息文本、编辑，以及分隔后的删除；助手菜单列出复制、选中消息文本、重新生成和分叉。复制写入打开菜单时该行内的选中文本；光标折叠或选区在行外时退回整段。复制整个对话仍写入带说话人标签的整段对话。两者都显示 toast。选中文本会高亮气泡。Escape 和 Tab 关闭菜单且不执行项。链接仍提供在默认浏览器打开、在工作面板打开、复制链接地址。引用、批注、打开侧边聊天不出现（ADR 0268）。表面是视口固定的文档级层，不会改变记录高度。
 - **链接规格**：`04-ux/08-component-spec.md` §8.3 / §8.5，
   `04-ux/09-interaction-patterns.md`（浮动下拉表面），
   ADR 0268
@@ -5096,6 +5096,8 @@ IPC 请求无法关闭。
 | 品质（会话列表响应性） | E2E-SESSION-list-refresh-keeps-desktop-responsive |
 | 安全性（导入扩展依赖） | E2E-PLUGIN-import-extension-installs-dependencies、E2E-PLUGIN-import-extension-reports-missing-dependency |
 | 品质（导入扩展依赖） | E2E-PLUGIN-import-extension-installs-dependencies、E2E-PLUGIN-import-extension-reports-missing-dependency |
+| F / G / 安全性 / 品质 — 导入扩展的 npm 恢复 | E2E-PLUGIN-import-extension-recovers-missing-npm |
+| G — 插件（桌面工具调度预算） | E2E-PLUGIN-slow-tool-is-not-cut-off-by-host-dispatch |
 | C — 对话与流式（独立会话通信） | E2E-SESSION-independent-top-level-communication |
 | D — 插件安全（独立会话通信） | E2E-SESSION-independent-top-level-communication |
 | G — 插件（独立会话通信） | E2E-SESSION-independent-top-level-communication |
@@ -5135,6 +5137,8 @@ IPC 请求无法关闭。
 | 基线后本地自动化 | E2E-220 |
 | MVP 后远程控制 | E2E-221、E2E-222、E2E-223、E2E-224、E2E-225、E2E-226、E2E-227、E2E-228、E2E-229、E2E-230、E2E-231、E2E-232 |
 | 受信任扩展（R7 v1） | E2E-241、E2E-242、E2E-243、E2E-244、E2E-245、E2E-PLUGIN-imported-pi-package-skills、E2E-PLUGIN-import-extension-installs-dependencies、E2E-PLUGIN-import-extension-reports-missing-dependency、E2E-PLUGIN-declared-provider-appears-in-the-native-provider-list |
+| 受信任扩展（R7 v1 npm 恢复） | E2E-PLUGIN-import-extension-recovers-missing-npm |
+| Post-MVP 回归覆盖（插件工具调度） | E2E-PLUGIN-slow-tool-is-not-cut-off-by-host-dispatch |
 | M6+（删除项目） | E2E-PROJECT-delete-removes-project-and-owned-sessions |
 | M6+（两步删除） | E2E-SESSION-two-click-delete-arms-first |
 | C — 对话和直播（模型回退） | E2E-SUBAGENT-ordered-model-fallback-preserves-work |
@@ -8066,3 +8070,31 @@ the latest destination. These assertions measure work counts, not device FPS.
 - **Status:** Automated for the executing native platform; run on macOS/Linux
   runners for native qualification. Optional screenshots are written only to
   `PI_DESKTOP_CHROME_ARTIFACT_DIR`.
+
+### E2E-PLUGIN-slow-tool-is-not-cut-off-by-host-dispatch
+
+- **Preconditions:** A loaded plugin that registers an agent tool; the tool
+  awaits work longer than 60s but shorter than the 110s plugin tool budget (for
+  example an `agent.complete` call that takes ~70s).
+- **Steps:** Ask the agent to use the tool, approve it if prompted, and wait for
+  the call to finish. Repeat with the permission card left open for a while
+  before approving.
+- **Expected:** The call returns the plugin's result. host-core does not answer
+  `TOOL_TIMEOUT` before Electron's budget expires, and no transport layer reports
+  `host RPC timeout`, `sidecar RPC timeout`, or `parent host proxy timeout` for
+  the call. Budgets nest from the inside out: plugin `agent.complete` 90s < MCP
+  call 100s < plugin tool 110s < host-core dispatch 150s, while the widest MCP leg
+  (a lazy handshake, then a `tools/list` traversal, then the call) is 140s. The
+  transport deadline covers the permission wait, the admission queue wait, and
+  that dispatch, so a call that waited for a saturated plugin class before it was
+  dispatched is still inside it.
+- **Specs:** `07-plugins/12-plugin-ipc-and-host-services.md` agent-tool
+  dispatch; ADR 0038; ADR 0174.
+- **Acceptance:** G (plugin agent tool).
+- **Milestone:** Post-MVP regression coverage.
+- **Automation:** `apps/desktop/test/plugin-timeout-budgets.test.mjs` checks the
+  budget order and the dispatch call site across the TypeScript and Rust sources;
+  `packages/shared/src/protocol.test.ts` covers the transport deadline; host-core
+  `desktop_dispatch_outlasts_every_electron_budget_it_wraps` covers the dispatch
+  default.
+- **Status:** Contract-covered; no end-to-end driver waits out a real 70s call.

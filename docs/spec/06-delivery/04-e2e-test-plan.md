@@ -1918,6 +1918,22 @@ identify the platform validation still needed.
 - **Milestone**: M5
 - **Status**: Automated (host-core unit tests: login-PATH probe + child-PATH injection)
 
+#### E2E-MCP-stdio-login-path: Market stdio MCP finds uvx/npx after a GUI launch (issue #571)
+
+- **Preconditions**: macOS; the app was started from Finder/Dock so `process.env.PATH`
+  is the GUI default; `uvx` or `npx` exists on the user's login-shell PATH.
+- **Steps**: 1) Install Fetch from the MCP market (`uvx mcp-server-fetch`).
+  2) Test connection. 3) Repeat with an npx catalog entry.
+- **Expected**: The stdio child env PATH includes the login-shell PATH (Homebrew /
+  nvm / `~/.local/bin`) ahead of the GUI PATH, so spawn succeeds. A truly missing
+  binary reports `command not found: uvx` rather than `spawn uvx ENOENT`.
+  Windows keeps the inherited PATH.
+- **Specs linked**: ADR 0045, D600, `03-runtime/03-tools-and-permissions.md`
+- **Acceptance**: Quality
+- **Milestone**: M6+
+- **Status**: Automated (`apps/desktop/test/user-login-path.test.mjs`,
+  `apps/desktop/test/plugin-mcp.test.mjs`)
+
 ### Session Persistence
 
 #### E2E-020: Session survives restart
@@ -2112,8 +2128,9 @@ identify the platform validation still needed.
   expanded row, then keyboard-focus and activate the processing group's
   vertical rule. 8) Reload the session and expand the restored group.
 - **Expected**: The latest active group opens automatically so the process list
-  is visible, but tool-call details, including failed tool details, remain
-  collapsed. The latest thinking step
+  is visible. Compact tool-call details, including failed tool details, remain
+  collapsed. In detailed mode the last tool-call of the last activity group
+  starts expanded and earlier rows stay collapsed. The latest thinking step
   opens automatically while it streams; older groups and rows remain collapsed.
   The header shows its localized processing label, elapsed time, and step count
   without an additional status capsule. When the turn settles, the automatic
@@ -3427,15 +3444,20 @@ identify the platform validation still needed.
 - **Preconditions**: A session contains a completed user prompt and a
   completed assistant answer; the conversation pane is focused.
 - **Steps**: 1) Right-click the user plate. 2) Choose Copy, then Select
-  message text. 3) Right-click the assistant turn and choose Copy.
-  4) Right-click empty space below the last turn and choose Copy
-  conversation. 5) Press Escape on an open menu, then Tab. 6) Right-click
+  message text. 3) Select a phrase in the user plate, right-click that
+  plate, and choose Copy; collapse the caret, right-click again, and
+  choose Copy. 4) Right-click the assistant turn and choose Copy.
+  5) Right-click empty space below the last turn and choose Copy
+  conversation. 6) Press Escape on an open menu, then Tab. 7) Right-click
   a markdown link in the answer.
 - **Expected**: The user menu lists Copy, Select message text, Edit, and
   a separated Delete; the assistant menu lists Copy, Select message text,
-  Regenerate, and Branch. Copy writes the message or the labelled
-  conversation to the clipboard and shows a toast. Select text highlights
-  the bubble. Escape and Tab dismiss the menu without running an item.
+  Regenerate, and Branch. Copy writes the live selection in the
+  right-clicked turn when the menu opened over one; a collapsed caret
+  or a selection outside that row falls back to the whole turn. Copy
+  conversation writes the labelled thread. Both show a toast. Select
+  text highlights the bubble. Escape and Tab dismiss the menu without
+  running an item.
   A link still offers Open in default browser, Open in work panel, and
   Copy link address. Quote, Annotate, and Open side chat are absent
   (ADR 0268). The surface is a viewport-fixed body-level layer and does
@@ -7709,6 +7731,8 @@ identify the platform validation still needed.
 | Quality (Session list responsiveness) | E2E-SESSION-list-refresh-keeps-desktop-responsive |
 | Security (imported extension dependencies) | E2E-PLUGIN-import-extension-installs-dependencies, E2E-PLUGIN-import-extension-reports-missing-dependency |
 | Quality (imported extension dependencies) | E2E-PLUGIN-import-extension-installs-dependencies, E2E-PLUGIN-import-extension-reports-missing-dependency |
+| F / G / Security / Quality — Imported extension npm recovery | E2E-PLUGIN-import-extension-recovers-missing-npm |
+| G — Plugins (desktop tool dispatch budget) | E2E-PLUGIN-slow-tool-is-not-cut-off-by-host-dispatch |
 | C — Conversation & stream (Independent session communication) | E2E-SESSION-independent-top-level-communication |
 | D — Plugin security (Independent session communication) | E2E-SESSION-independent-top-level-communication |
 | G — Plugins (Independent session communication) | E2E-SESSION-independent-top-level-communication |
@@ -7754,6 +7778,8 @@ identify the platform validation still needed.
 | Post-baseline local automation | E2E-220 |
 | Post-MVP remote control | E2E-221, E2E-222, E2E-223, E2E-224, E2E-225, E2E-226, E2E-227, E2E-228, E2E-229, E2E-230, E2E-231, E2E-232 |
 | Trusted extensions (R7 v1) | E2E-241, E2E-242, E2E-TRUSTED-EXTENSION-custom-agent-stream-and-binding, E2E-243, E2E-244, E2E-245, E2E-PLUGIN-imported-pi-package-skills, E2E-PLUGIN-import-extension-installs-dependencies, E2E-PLUGIN-import-extension-reports-missing-dependency, E2E-PLUGIN-declared-provider-appears-in-the-native-provider-list |
+| Trusted extensions (R7 v1 npm recovery) | E2E-PLUGIN-import-extension-recovers-missing-npm |
+| Post-MVP regression coverage (plugin tool dispatch) | E2E-PLUGIN-slow-tool-is-not-cut-off-by-host-dispatch |
 | M6+ (Project delete) | E2E-PROJECT-delete-removes-project-and-owned-sessions |
 | M6+ (Two-click delete) | E2E-SESSION-two-click-delete-arms-first |
 | C — Conversation & stream (model fallback) | E2E-SUBAGENT-ordered-model-fallback-preserves-work |
@@ -12354,7 +12380,7 @@ plugin-form fixtures in an isolated temporary directory at runtime.
 - **Specs linked**: `07-plugins/16-trusted-extensions.md` §4.2, §13; ADR 0214
 - **Acceptance**: Quality, Release
 - **Milestone**: Post-MVP (R7 v1, delivered first as the bundling spike)
-- **Status**: Unit-covered by `packages/agent-runtime/src/extensions/bundle.test.ts` (esbuild bundle run from a temp directory); the packaged-app jiti journey remains Draft and is not faked by the headless runner.
+- **Status**: Unit-covered by `packages/agent-runtime/src/extensions/bundle.test.ts`: an esbuild bundle run from a temp directory, plus a kernel-loader case that loads a `typebox`-importing extension through `@earendil-works/pi-coding-agent`'s own loader from a bundle with no `node_modules` above it; the packaged-app jiti journey remains Draft and is not faked by the headless runner.
 #### E2E-PLUGIN-import-extension-installs-dependencies: Importing an extension with npm dependencies installs them before first load
 
 - **Preconditions**: A local pi extension package with `package.json`, `pi.extensions`,
@@ -12391,6 +12417,50 @@ plugin-form fixtures in an isolated temporary directory at runtime.
 - **Status**: Automated by `pnpm test:e2e:plugin-import-deps` for the deterministic
   registry-source rejection boundary; renderer warning-toast and `load_error`
   behavior remains a separate validation surface.
+
+#### E2E-PLUGIN-import-extension-recovers-missing-npm: Choose a trusted npm installation and resume the same import
+
+- **Preconditions**: A desktop build with an isolated data directory; npm/Node.js
+  unavailable on its inherited `PATH`; a local extension declaring a pinned
+  registry dependency and an install-script marker; a trusted Node.js/npm
+  installation outside `PATH` (on macOS, include a hidden `~/.nvm` directory).
+- **Steps**: 1) Import the package through Plugins and accept the trust confirm.
+  2) In the native missing-npm message choose "Choose npm". Select an invalid
+  executable, then an npm without usable Node.js; choose again after each warning.
+  3) Select working npm alongside `node`. Inspect the resulting plugin and saved
+  path. 4) Restart the app and import another package; then remove or move the
+  saved executable and repeat. 5) Repeat with Cancel in the message box, picker,
+  and invalid-selection warning. 6) Make saving the path fail while keeping the
+  plugin destination writable and retry with a valid selection. 7) With working
+  npm, force an ordinary registry/network failure. Repeat dialog checks in all
+  eight shipped locales.
+- **Expected**: Only structured npm/Node unavailability prompts for a path.
+  Native copy explains trusted Node.js, installing Node.js if absent, and remembering
+  the selection; hidden directories are visible. Invalid selections are rejected
+  by bounded version checks and never saved; choose-again/cancel stays available.
+  A valid choice resumes installation in the original generated directory with
+  the original plugin id and writes `<dataDir>/npm-path.json` atomically. Restart
+  reuses the validated path without prompting; a stale saved path prompts again.
+  Save failure warns but the current install still uses the valid choice. Every
+  completion, cancellation, and dependency error loads/registers that generated
+  plugin exactly once without recopying it; dependency failures remain visible.
+  Network/registry failures never open the npm picker. Only the install child
+  gains the selected directory in `PATH`; shell probing, global environment
+  changes, credential inheritance, and lifecycle marker execution do not occur.
+  The registry-only proxy and two-step dependency validation remain enforced.
+  Dialogs use localized standalone bodies and existing localized Cancel, with
+  dynamic diagnostics appended on a new line.
+- **Specs linked**: `07-plugins/16-trusted-extensions.md` §3.2; ADR 0244
+- **Acceptance**: F, G, Security, Quality
+- **Milestone**: Post-MVP (R7 v1)
+- **Status**: Automated at the native-dialog I/O boundary by
+  `pnpm test:e2e:plugin-import-deps`: the real import handler and npm installer
+  recover from an empty PATH, keep registry-only resolution and disabled scripts,
+  persist the selected path, and register the same plugin once. The desktop
+  `npm-install-recovery.test.mjs` suite covers cancellation, invalid/stale paths,
+  preference reload, save failure, localization, and ordinary network errors.
+  Physical native-picker interaction (including macOS symlink selection), full
+  desktop restart, and visual checks in every locale remain manual/not run.
 
 
 ---
@@ -13561,8 +13631,9 @@ plugin-form fixtures in an isolated temporary directory at runtime.
   intermediate message; switch display modes through Settings → AI → Defaults.
   Repeat with a stopped partial answer, an assistant error and a failed tool.
 - **Expected:** In detailed mode, thinking, tools and intermediate text stay
-  in place with no process wrapper. Compact mode keeps that process collapsed
-  until expanded. Manual choices survive updates; search reveals its target; live answer text
+  in place with no process wrapper, and the last tool-call of the last activity
+  group starts expanded. Compact mode keeps that process collapsed
+  until expanded, with tool payloads collapsed. Manual choices survive updates; search reveals its target; live answer text
   stays readable. Errors and stopped trailing text stay visible. Compact mode
   exposes no reasoning text or excerpt, shows a live indicator, and leaves no
   completed thinking-only header. Tools and progress remain accessible. Switching
@@ -13645,3 +13716,31 @@ the latest destination. These assertions measure work counts, not device FPS.
 - **Status:** Automated for the executing native platform; run on macOS/Linux
   runners for native qualification. Optional screenshots are written only to
   `PI_DESKTOP_CHROME_ARTIFACT_DIR`.
+
+### E2E-PLUGIN-slow-tool-is-not-cut-off-by-host-dispatch
+
+- **Preconditions:** A loaded plugin that registers an agent tool; the tool
+  awaits work longer than 60s but shorter than the 110s plugin tool budget (for
+  example an `agent.complete` call that takes ~70s).
+- **Steps:** Ask the agent to use the tool, approve it if prompted, and wait for
+  the call to finish. Repeat with the permission card left open for a while
+  before approving.
+- **Expected:** The call returns the plugin's result. host-core does not answer
+  `TOOL_TIMEOUT` before Electron's budget expires, and no transport layer reports
+  `host RPC timeout`, `sidecar RPC timeout`, or `parent host proxy timeout` for
+  the call. Budgets nest from the inside out: plugin `agent.complete` 90s < MCP
+  call 100s < plugin tool 110s < host-core dispatch 150s, while the widest MCP leg
+  (a lazy handshake, then a `tools/list` traversal, then the call) is 140s. The
+  transport deadline covers the permission wait, the admission queue wait, and
+  that dispatch, so a call that waited for a saturated plugin class before it was
+  dispatched is still inside it.
+- **Specs:** `07-plugins/12-plugin-ipc-and-host-services.md` agent-tool
+  dispatch; ADR 0038; ADR 0174.
+- **Acceptance:** G (plugin agent tool).
+- **Milestone:** Post-MVP regression coverage.
+- **Automation:** `apps/desktop/test/plugin-timeout-budgets.test.mjs` checks the
+  budget order and the dispatch call site across the TypeScript and Rust sources;
+  `packages/shared/src/protocol.test.ts` covers the transport deadline; host-core
+  `desktop_dispatch_outlasts_every_electron_budget_it_wraps` covers the dispatch
+  default.
+- **Status:** Contract-covered; no end-to-end driver waits out a real 70s call.
