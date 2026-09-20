@@ -299,6 +299,7 @@ export function registerIpcHandlers(dependencies: RegisterIpcDependencies) {
   });
   registerWorkspaceIpc({
     registrar,
+    getMainWindow,
     getHost,
     getSidecar,
     dataDir,
